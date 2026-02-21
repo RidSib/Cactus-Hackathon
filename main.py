@@ -20,7 +20,9 @@ def generate_cactus(messages, tools):
 
     raw_str = cactus_complete(
         model,
-        [{"role": "system", "content": "You are a helpful assistant that can use tools."}] + messages,
+        [{"role": "system",
+          "content": "You are a helpful assistant "
+          "that can use tools."}] + messages,
         tools=cactus_tools,
         force_tools=True,
         max_tokens=256,
@@ -71,11 +73,24 @@ def generate_cloud(messages, tools):
 
     start_time = time.time()
 
-    gemini_response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=contents,
-        config=types.GenerateContentConfig(tools=gemini_tools),
-    )
+    # Try the newest Flash model first, then fall back to stable if needed.
+    model_candidates = ["gemini-3-flash-preview", "gemini-2.5-flash"]
+    last_error = None
+    gemini_response = None
+
+    for model_name in model_candidates:
+        try:
+            gemini_response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=types.GenerateContentConfig(tools=gemini_tools),
+            )
+            break
+        except Exception as exc:
+            last_error = exc
+
+    if gemini_response is None:
+        raise last_error
 
     total_time_ms = (time.time() - start_time) * 1000
 
@@ -124,33 +139,112 @@ def print_result(label, result):
         print(f"Arguments: {json.dumps(call['arguments'], indent=2)}")
 
 
-############## Example usage ##############
+############## Tool definitions ##############
 
-if __name__ == "__main__":
-    tools = [{
-        "name": "get_weather",
-        "description": "Get current weather for a location",
+TOOLS = [
+    {
+        "name": "lookup_company_data",
+        "description":
+            "Look up data about a company such as "
+            "revenue, payments, contracts, or costs",
         "parameters": {
             "type": "object",
             "properties": {
-                "location": {
+                "company": {
                     "type": "string",
-                    "description": "City name",
-                }
+                    "description": "Company name",
+                },
+                "metric": {
+                    "type": "string",
+                    "description":
+                        "What to look up: revenue, "
+                        "profit, cost, payments, "
+                        "or contract",
+                },
+                "period": {
+                    "type": "string",
+                    "description":
+                        "Time period like 2025, Q3, "
+                        "or last quarter",
+                },
             },
-            "required": ["location"],
+            "required": ["company"],
         },
-    }]
+    },
+    {
+        "name": "lookup_person",
+        "description":
+            "Look up information about a person "
+            "such as salary, role, or contact details",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description":
+                        "Person's full name",
+                },
+                "info_type": {
+                    "type": "string",
+                    "description":
+                        "What to look up: salary, "
+                        "role, department, or contact",
+                },
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "general_query",
+        "description":
+            "Handle a general question that does "
+            "not involve a specific company or person",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description":
+                        "The user's question",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+]
 
-    messages = [
-        {"role": "user", "content": "What is the weather in San Francisco?"}
+############## Example usage ##############
+
+if __name__ == "__main__":
+    test_queries = [
+        "Give me our revenue from Nvidia for 2025",
+        "What is John Smith's salary?",
+        "Show me the contract with Microsoft Azure",
+        "How much did we pay Amazon last quarter?",
+        "What role does Maria Garcia have?",
+        "Pull up costs for Tesla in Q3",
+        "What is the weather today?",
+        "Who is our contact at Google?",
+        "Compare payments to Apple vs Samsung",
     ]
 
-    on_device = generate_cactus(messages, tools)
-    print_result("FunctionGemma (On-Device Cactus)", on_device)
-
-    cloud = generate_cloud(messages, tools)
-    print_result("Gemini (Cloud)", cloud)
-
-    hybrid = generate_hybrid(messages, tools)
-    print_result("Hybrid (On-Device + Cloud Fallback)", hybrid)
+    for query in test_queries:
+        msgs = [{"role": "user", "content": query}]
+        result = generate_cactus(msgs, TOOLS)
+        fc = result.get("function_calls", [])
+        conf = result.get("confidence", 0)
+        t = result.get("total_time_ms", 0)
+        if fc:
+            c = fc[0]
+            args = json.dumps(
+                c["arguments"], ensure_ascii=False
+            )
+            print(
+                f"[{conf:.3f}] {query}\n"
+                f"      -> {c['name']}({args})"
+            )
+        else:
+            print(
+                f"[{conf:.3f}] {query}\n"
+                f"      -> MISS"
+            )
