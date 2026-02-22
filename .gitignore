@@ -213,3 +213,7 @@ server/
 
 # Leaderboard data
 docs/
+
+# cloudNein web app
+web/node_modules/
+web/dist/

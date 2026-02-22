@@ -47,6 +47,34 @@ def generate_cactus(messages, tools):
     }
 
 
+def generate_cactus_chat(messages):
+    """Run on-device chat (no forced tools); returns text and confidence."""
+    model = cactus_init(functiongemma_path)
+    raw_str = cactus_complete(
+        model,
+        [{"role": "system",
+          "content": "You are a helpful assistant."}] + messages,
+        tools=None,
+        force_tools=False,
+        max_tokens=256,
+        stop_sequences=["<|im_end|>", "<end_of_turn>"],
+    )
+    cactus_destroy(model)
+    try:
+        raw = json.loads(raw_str)
+    except json.JSONDecodeError:
+        return {
+            "response": None,
+            "confidence": 0,
+            "cloud_handoff": True,
+        }
+    return {
+        "response": raw.get("response"),
+        "confidence": raw.get("confidence", 0),
+        "cloud_handoff": raw.get("cloud_handoff", True),
+    }
+
+
 def generate_cloud(messages, tools):
     """Run function calling via Gemini Cloud API."""
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))

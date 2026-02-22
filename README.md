@@ -1,5 +1,45 @@
 <img src="assets/banner.png" alt="Logo" style="border-radius: 30px; width: 100%;">
 
+## cloudNein (web app)
+
+cloudNein is a privacy-first chat interface: **keeping what matters local**. Sensitive entities (company names, people) are detected on-device with Cactus. When entities are present and a secret key is set, their values are **encrypted** and only the encrypted sentence is sent to a **server farm** container; the server decrypts, enriches from a local knowledge base (e.g. Nvidia revenue 2025), and calls Gemini. Otherwise, redacted context is sent to Gemini or the local model answers.
+
+**Run the app:**
+
+1. **Environment** (repo root): copy or create `.env` with:
+   ```bash
+   CLOUDNEIN_SECRET_KEY=<base64-fernet-key>
+   GEMINI_API_KEY=<your-gemini-key>
+   ```
+   Generate a Fernet key: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+
+2. **Server farm** (decrypts + Gemini + knowledge base). Either:
+   - **Docker:** `docker compose up --build -d` (exposes port 8001), or
+   - **Direct:** from repo root, `pip install -r server/requirements.txt` then:
+     ```bash
+     source venv/bin/activate
+     export $(grep -v '^#' .env | xargs)   # load .env
+     uvicorn server.main:app --host 0.0.0.0 --port 8001
+     ```
+
+3. **Backend API** (from repo root):
+   ```bash
+   pip install -r api/requirements.txt
+   uvicorn api.main:app --reload
+   ```
+   The API reads `.env` and calls the server farm at `http://localhost:8001` by default; set `SERVER_FARM_URL` if the server runs elsewhere.
+
+4. **Frontend:**
+   ```bash
+   cd web && npm install && npm run dev
+   ```
+
+5. Open [http://localhost:5173](http://localhost:5173) for the landing page, or [http://localhost:5173/chat](http://localhost:5173/chat) to chat. The UI talks to the API at `http://localhost:8000` by default; set `VITE_API_URL` if the API runs elsewhere.
+
+**Flow:** User message → Cactus extracts entities → if entities + `CLOUDNEIN_SECRET_KEY`: encrypt entity values, send encrypted sentence + key to server farm → server decrypts, looks up knowledge base (e.g. Nvidia revenue 2025 = $25,000M), calls Gemini → response shown in chat with source **server farm**. Otherwise, local reply or redacted Gemini fallback.
+
+---
+
 ## Context
 - Cactus runs Google DeepMind's FunctionGemma at up to 3000 toks/sec prefill speed on M4 Macs.
 - While decode speed reaches 200 tokens/sec, all without GPU, to remain energy-efficient. 

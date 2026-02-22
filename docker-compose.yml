@@ -1,0 +1,8 @@
+services:
+  server-farm:
+    build: ./server
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    restart: unless-stopped
