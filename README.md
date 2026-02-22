@@ -1,5 +1,3 @@
-<img src="assets/banner.png" alt="Logo" style="border-radius: 30px; width: 100%;">
-
 ## cloudNein (web app)
 
 cloudNein is a privacy-first chat interface: **keeping what matters local**. Sensitive entities (company names, people) are detected on-device with Cactus. When entities are present and a secret key is set, their values are **encrypted** and only the encrypted sentence is sent to a **server farm** container; the server decrypts, enriches from a local knowledge base (e.g. Nvidia revenue 2025), and calls Gemini. Otherwise, redacted context is sent to Gemini or the local model answers.
